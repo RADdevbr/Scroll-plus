@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SmoothScroll</AssemblyName>
+    <RootNamespace>SmoothScroll</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- No external NuGet dependencies: only the base SDK + WinForms. -->
+  </PropertyGroup>
+
+</Project>
