@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="SmoothScroll.app" />
+
+  <!--
+    SmoothScroll installs a global WH_MOUSE_LL hook. That hook does NOT require
+    administrator rights, so the application runs as the invoking user.
+
+    IMPORTANT (UIPI / elevation note): a non-elevated process cannot post
+    messages to, or hook input for, windows that belong to a process running
+    *at a higher integrity level* (i.e. an elevated / "Run as administrator"
+    application). If a target viewer is launched elevated, SmoothScroll must be
+    launched elevated too for PostMessage(WM_MOUSEWHEEL) to be delivered.
+    In that case set requestedExecutionLevel to requireAdministrator below.
+  -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- Per-monitor DPI awareness so coordinate math stays correct on HiDPI. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+    </windowsSettings>
+  </application>
+
+  <!-- Enable visual styles / common controls v6 for the settings UI. -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*" />
+    </dependentAssembly>
+  </dependency>
+</assembly>
