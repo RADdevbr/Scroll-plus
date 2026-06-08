@@ -23,3 +23,22 @@ jobs:
 
       - name: Build
         run: dotnet build SmoothScroll.sln -c Release --no-restore
+
+      # Produce a self-contained, single-file SmoothScroll.exe (no .NET install
+      # required on the target machine) and publish it as a downloadable artifact.
+      - name: Publish single-file exe
+        run: >
+          dotnet publish SmoothScroll/SmoothScroll.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Upload SmoothScroll.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmoothScroll-win-x64
+          path: publish/SmoothScroll.exe
+          if-no-files-found: error
