@@ -4,6 +4,9 @@ namespace SmoothScroll.UI;
 /// Settings panel shown from the tray. Edits the shared <see cref="AppSettings"/>
 /// instance in place (so changes take effect live) and invokes a callback so the
 /// owner can persist them to disk and refresh the tray.
+///
+/// Layout uses TableLayoutPanel / docking + AutoScroll rather than absolute
+/// coordinates, so it stays correct across DPI scaling and font sizes.
 /// </summary>
 public sealed class SettingsForm : Form
 {
@@ -12,6 +15,8 @@ public sealed class SettingsForm : Form
 
     // Guards programmatic control updates from re-triggering change handlers.
     private bool _suppress;
+
+    private TableLayoutPanel _root = null!;
 
     private CheckBox _enabledCheck = null!;
     private CheckBox _targetOnlyCheck = null!;
@@ -24,6 +29,9 @@ public sealed class SettingsForm : Form
 
     private TrackBar _stepsBar = null!;
     private Label _stepsValue = null!;
+
+    private TrackBar _frameBar = null!;
+    private Label _frameValue = null!;
 
     private ListBox _targetsList = null!;
     private TextBox _targetInput = null!;
@@ -40,47 +48,40 @@ public sealed class SettingsForm : Form
     private void BuildUi()
     {
         Text = "SmoothScroll Settings";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(420, 560);
+        AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 9f);
+        ClientSize = new Size(460, 680);
+        MinimumSize = new Size(440, 480);
 
-        int y = 14;
-        const int left = 16;
-        const int width = 388;
+        // Single-column, auto-sizing rows, scrolls vertically if it ever overflows.
+        _root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoScroll = true,
+            Padding = new Padding(14),
+        };
+        _root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        Controls.Add(_root);
 
         // --- Master enable ---
-        _enabledCheck = new CheckBox
-        {
-            Text = "Enable smoothing",
-            Location = new Point(left, y),
-            AutoSize = true,
-        };
+        _enabledCheck = new CheckBox { Text = "Enable smoothing", AutoSize = true };
         _enabledCheck.CheckedChanged += (_, _) =>
         {
             if (_suppress) return;
             _settings.Enabled = _enabledCheck.Checked;
             Commit();
         };
-        Controls.Add(_enabledCheck);
-        y += 34;
+        AddRow(_enabledCheck);
 
         // --- Sensitivity (0.5x .. 3.0x) ---
-        AddSectionLabel("Sensitivity (raw delta multiplier)", left, ref y);
-        _sensitivityValue = AddValueLabel(left + width - 60, y - 22);
-        _sensitivityBar = new TrackBar
-        {
-            Location = new Point(left, y),
-            Width = width,
-            Minimum = 5,   // 0.5x  (value / 10)
-            Maximum = 30,  // 3.0x
-            TickFrequency = 5,
-            SmallChange = 1,
-            LargeChange = 5,
-        };
+        _sensitivityValue = NewValueLabel();
+        AddRow(NewHeader("Sensitivity (raw delta multiplier)", _sensitivityValue));
+        _sensitivityBar = NewBar(5, 30, 5); // value / 10
         _sensitivityBar.ValueChanged += (_, _) =>
         {
             if (_suppress) return;
@@ -88,22 +89,12 @@ public sealed class SettingsForm : Form
             _sensitivityValue.Text = $"{_settings.Sensitivity:0.0}x";
             Commit();
         };
-        Controls.Add(_sensitivityBar);
-        y += 56;
+        AddRow(_sensitivityBar);
 
         // --- Friction (0.80 .. 0.98) ---
-        AddSectionLabel("Friction (inertia decay per frame)", left, ref y);
-        _frictionValue = AddValueLabel(left + width - 60, y - 22);
-        _frictionBar = new TrackBar
-        {
-            Location = new Point(left, y),
-            Width = width,
-            Minimum = 80,  // 0.80  (value / 100)
-            Maximum = 98,  // 0.98
-            TickFrequency = 2,
-            SmallChange = 1,
-            LargeChange = 2,
-        };
+        _frictionValue = NewValueLabel();
+        AddRow(NewHeader("Friction (inertia decay per frame)", _frictionValue));
+        _frictionBar = NewBar(80, 98, 2); // value / 100
         _frictionBar.ValueChanged += (_, _) =>
         {
             if (_suppress) return;
@@ -111,22 +102,12 @@ public sealed class SettingsForm : Form
             _frictionValue.Text = $"{_settings.Friction:0.00}";
             Commit();
         };
-        Controls.Add(_frictionBar);
-        y += 56;
+        AddRow(_frictionBar);
 
         // --- Steps per event (4 .. 20) ---
-        AddSectionLabel("Steps per event (messages per scroll)", left, ref y);
-        _stepsValue = AddValueLabel(left + width - 60, y - 22);
-        _stepsBar = new TrackBar
-        {
-            Location = new Point(left, y),
-            Width = width,
-            Minimum = 4,
-            Maximum = 20,
-            TickFrequency = 2,
-            SmallChange = 1,
-            LargeChange = 2,
-        };
+        _stepsValue = NewValueLabel();
+        AddRow(NewHeader("Steps per event (messages per scroll)", _stepsValue));
+        _stepsBar = NewBar(4, 20, 2);
         _stepsBar.ValueChanged += (_, _) =>
         {
             if (_suppress) return;
@@ -134,14 +115,25 @@ public sealed class SettingsForm : Form
             _stepsValue.Text = _settings.StepsPerEvent.ToString();
             Commit();
         };
-        Controls.Add(_stepsBar);
-        y += 56;
+        AddRow(_stepsBar);
+
+        // --- Frame interval in ms (4 .. 16 ms ≈ 250 .. 60 fps) ---
+        _frameValue = NewValueLabel();
+        AddRow(NewHeader("Frame interval (scroll cadence)", _frameValue));
+        _frameBar = NewBar(4, 16, 1); // value = milliseconds per frame
+        _frameBar.ValueChanged += (_, _) =>
+        {
+            if (_suppress) return;
+            _settings.FrameIntervalMs = _frameBar.Value;
+            _frameValue.Text = $"{_settings.FrameIntervalMs} ms (~{1000 / _settings.FrameIntervalMs} fps)";
+            Commit();
+        };
+        AddRow(_frameBar);
 
         // --- Scope checkbox ---
         _targetOnlyCheck = new CheckBox
         {
             Text = "Apply only to target windows (unchecked = apply globally)",
-            Location = new Point(left, y),
             AutoSize = true,
         };
         _targetOnlyCheck.CheckedChanged += (_, _) =>
@@ -151,26 +143,21 @@ public sealed class SettingsForm : Form
             UpdateTargetControlsEnabled();
             Commit();
         };
-        Controls.Add(_targetOnlyCheck);
-        y += 34;
+        AddRow(_targetOnlyCheck);
 
         // --- Target windows list ---
-        AddSectionLabel("Target windows (process name or title fragment)", left, ref y);
-        _targetsList = new ListBox
-        {
-            Location = new Point(left, y),
-            Width = width,
-            Height = 120,
-            SelectionMode = SelectionMode.One,
-        };
-        Controls.Add(_targetsList);
-        y += 128;
+        AddRow(new Label { Text = "Target windows (process name or title fragment)", AutoSize = true });
 
-        _targetInput = new TextBox
-        {
-            Location = new Point(left, y),
-            Width = width - 170,
-        };
+        _targetsList = new ListBox { Height = 130, IntegralHeight = false };
+        AddRow(_targetsList);
+
+        // Input row: textbox (stretch) + Add + Remove.
+        var inputRow = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Fill };
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _targetInput = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
         _targetInput.KeyDown += (_, e) =>
         {
             if (e.KeyCode == Keys.Enter)
@@ -179,63 +166,69 @@ public sealed class SettingsForm : Form
                 AddTarget();
             }
         };
-        Controls.Add(_targetInput);
 
-        var addButton = new Button
-        {
-            Text = "Add",
-            Location = new Point(left + width - 162, y - 1),
-            Width = 78,
-        };
+        var addButton = new Button { Text = "Add", AutoSize = true, Margin = new Padding(0, 0, 6, 0) };
         addButton.Click += (_, _) => AddTarget();
-        Controls.Add(addButton);
 
-        var removeButton = new Button
-        {
-            Text = "Remove",
-            Location = new Point(left + width - 80, y - 1),
-            Width = 80,
-        };
+        var removeButton = new Button { Text = "Remove", AutoSize = true, Margin = new Padding(0) };
         removeButton.Click += (_, _) => RemoveSelectedTarget();
-        Controls.Add(removeButton);
-        y += 40;
 
-        // --- Close (hides to tray) ---
-        var closeButton = new Button
+        inputRow.Controls.Add(_targetInput, 0, 0);
+        inputRow.Controls.Add(addButton, 1, 0);
+        inputRow.Controls.Add(removeButton, 2, 0);
+        AddRow(inputRow);
+
+        // --- Bottom buttons (right-aligned) ---
+        var buttonRow = new FlowLayoutPanel
         {
-            Text = "Close",
-            Location = new Point(left + width - 90, y),
-            Width = 90,
-            DialogResult = DialogResult.OK,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 10, 0, 0),
         };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
         closeButton.Click += (_, _) => Hide();
-        Controls.Add(closeButton);
+        var resetButton = new Button { Text = "Reset defaults", AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        resetButton.Click += (_, _) => ResetDefaults();
+        buttonRow.Controls.Add(closeButton);
+        buttonRow.Controls.Add(resetButton);
+        AddRow(buttonRow);
+
         AcceptButton = closeButton;
     }
 
-    private void AddSectionLabel(string text, int left, ref int y)
+    /// <summary>Adds a control as the next full-width row of the layout.</summary>
+    private void AddRow(Control c)
     {
-        var label = new Label
-        {
-            Text = text,
-            Location = new Point(left, y),
-            AutoSize = true,
-        };
-        Controls.Add(label);
-        y += 22;
+        c.Margin = new Padding(0, 4, 0, 4);
+        // Docked composites already fill the cell; stretch everything else width-wise.
+        if (c.Dock != DockStyle.Fill)
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        _root.Controls.Add(c);
     }
 
-    private Label AddValueLabel(int x, int y)
+    private static Label NewValueLabel() => new() { AutoSize = true, Anchor = AnchorStyles.Right };
+
+    /// <summary>A header row: caption on the left, live value on the right.</summary>
+    private static TableLayoutPanel NewHeader(string caption, Label valueLabel)
     {
-        var label = new Label
-        {
-            Location = new Point(x, y),
-            AutoSize = true,
-            TextAlign = ContentAlignment.MiddleRight,
-        };
-        Controls.Add(label);
-        return label;
+        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0) };
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        t.Controls.Add(new Label { Text = caption, AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+        t.Controls.Add(valueLabel, 1, 0);
+        return t;
     }
+
+    private static TrackBar NewBar(int min, int max, int tick) => new()
+    {
+        Minimum = min,
+        Maximum = max,
+        TickFrequency = tick,
+        SmallChange = 1,
+        LargeChange = Math.Max(1, tick),
+        Height = 45,
+    };
 
     private void AddTarget()
     {
@@ -261,6 +254,22 @@ public sealed class SettingsForm : Form
 
         _settings.TargetWindows.RemoveAll(t => t.Equals(selected, StringComparison.OrdinalIgnoreCase));
         _targetsList.Items.Remove(selected);
+        Commit();
+    }
+
+    private void ResetDefaults()
+    {
+        var d = new AppSettings();
+        _settings.Enabled = d.Enabled;
+        _settings.Sensitivity = d.Sensitivity;
+        _settings.Friction = d.Friction;
+        _settings.StepsPerEvent = d.StepsPerEvent;
+        _settings.FrameIntervalMs = d.FrameIntervalMs;
+        _settings.TargetOnly = d.TargetOnly;
+        _settings.TargetWindows.Clear();
+        _settings.TargetWindows.AddRange(d.TargetWindows);
+
+        SyncFromSettings();
         Commit();
     }
 
@@ -294,6 +303,9 @@ public sealed class SettingsForm : Form
 
             _stepsBar.Value = Clamp(_settings.StepsPerEvent, _stepsBar.Minimum, _stepsBar.Maximum);
             _stepsValue.Text = _settings.StepsPerEvent.ToString();
+
+            _frameBar.Value = Clamp(_settings.FrameIntervalMs, _frameBar.Minimum, _frameBar.Maximum);
+            _frameValue.Text = $"{_frameBar.Value} ms (~{1000 / _frameBar.Value} fps)";
 
             _targetsList.Items.Clear();
             foreach (string t in _settings.TargetWindows)
