@@ -38,16 +38,27 @@ notably **RadiAnt DICOM Viewer** and **Weasis** (Java Swing).
 
 ## Configurable parameters (settings panel)
 
-- **Sensitivity** — raw delta multiplier, `0.5x` … `3.0x`.
-- **Friction** — per-frame inertia decay, `0.80` … `0.98` (higher = longer glide).
-- **Steps per event** — how many smaller messages each scroll is broken into,
-  `4` … `20` (higher = smoother / finer).
+Each control in the panel shows a plain-language hint, with the technical
+detail on hover.
+
+- **Sensitivity** (`0.5x` … `3.0x`) — how far each wheel notch scrolls; higher
+  is faster (raw wheel-delta multiplier).
+- **Friction (glide length)** (`0.80` … `0.98`) — how long it keeps coasting
+  after you stop; higher is a longer glide (per-frame velocity decay).
+- **Smoothness / steps per event** (`4` … `20`) — splits each scroll into more,
+  smaller steps; higher is smoother.
+- **Frame interval** (`4` … `16` ms) — how often a step is sent; lower ms is
+  smoother and uses a bit more CPU (~8 ms ≈ 120 fps).
 - **Target windows** — add/remove by process name (e.g. `RadiAnt`) or window
   title fragment (e.g. `Weasis`).
 - **Apply only to target windows / globally** — checkbox.
 
 > Tuning tip: total emitted scroll is roughly conserved when
 > `Steps per event ≈ 1 / (1 - Friction)`. e.g. Friction `0.90` → ~10 steps.
+
+**Directional inertia:** the glide only carries the direction you're scrolling.
+Rolling the wheel the opposite way mid-glide cancels it and immediately starts a
+new smooth glide in the new direction.
 
 ## Behavior
 

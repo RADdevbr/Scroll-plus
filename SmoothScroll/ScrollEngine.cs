@@ -9,6 +9,10 @@ namespace SmoothScroll;
 ///   emit      = velocity / StepsPerEvent      (a fraction posted this frame)
 ///   velocity *= Friction                      (exponential inertia decay)
 ///
+/// Inertia is directional: a wheel event in the opposite direction of the
+/// current glide cancels it and starts fresh in the new direction, rather than
+/// summing against the existing velocity.
+///
 /// Fractional emit is accumulated and only whole wheel deltas are posted.
 /// Because the geometric series sums to 1/(1-Friction), choosing
 /// StepsPerEvent ≈ 1/(1-Friction) makes total emitted scroll roughly conserve
@@ -52,7 +56,19 @@ public sealed class ScrollEngine : IDisposable
         lock (_lock)
         {
             _targetHwnd = targetHwnd;
-            _velocity += rawDelta * _settings.Sensitivity;
+            double incoming = rawDelta * _settings.Sensitivity;
+
+            // Inertia only carries the active direction of movement: if the new
+            // scroll opposes the current glide, cancel it and start fresh in the
+            // new direction (instead of partially summing against it).
+            if (incoming != 0 && _velocity != 0 &&
+                Math.Sign(incoming) != Math.Sign(_velocity))
+            {
+                _velocity = 0;
+                _emitRemainder = 0; // drop the fractional carry from the old direction
+            }
+
+            _velocity += incoming;
 
             if (!_running)
             {

@@ -16,6 +16,9 @@ public sealed class SettingsForm : Form
     // Guards programmatic control updates from re-triggering change handlers.
     private bool _suppress;
 
+    // Shows the technical detail of each control on hover.
+    private readonly ToolTip _tips = new() { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 100 };
+
     private TableLayoutPanel _root = null!;
 
     private CheckBox _enabledCheck = null!;
@@ -54,7 +57,7 @@ public sealed class SettingsForm : Form
         ShowInTaskbar = false;
         AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 9f);
-        ClientSize = new Size(460, 680);
+        ClientSize = new Size(460, 760);
         MinimumSize = new Size(440, 480);
 
         // Single-column, auto-sizing rows, scrolls vertically if it ever overflows.
@@ -76,11 +79,13 @@ public sealed class SettingsForm : Form
             _settings.Enabled = _enabledCheck.Checked;
             Commit();
         };
+        _tips.SetToolTip(_enabledCheck, "Mirror of the tray Enabled toggle.");
         AddRow(_enabledCheck);
+        AddDescription("Master switch — when off, the mouse wheel behaves normally.");
 
         // --- Sensitivity (0.5x .. 3.0x) ---
         _sensitivityValue = NewValueLabel();
-        AddRow(NewHeader("Sensitivity (raw delta multiplier)", _sensitivityValue));
+        AddRow(NewHeader("Sensitivity", _sensitivityValue));
         _sensitivityBar = NewBar(5, 30, 5); // value / 10
         _sensitivityBar.ValueChanged += (_, _) =>
         {
@@ -89,11 +94,13 @@ public sealed class SettingsForm : Form
             _sensitivityValue.Text = $"{_settings.Sensitivity:0.0}x";
             Commit();
         };
+        _tips.SetToolTip(_sensitivityBar, "Multiplier applied to the raw wheel delta (0.5x–3.0x).");
         AddRow(_sensitivityBar);
+        AddDescription("How far each wheel notch scrolls. Higher = faster, longer scrolls.");
 
         // --- Friction (0.80 .. 0.98) ---
         _frictionValue = NewValueLabel();
-        AddRow(NewHeader("Friction (inertia decay per frame)", _frictionValue));
+        AddRow(NewHeader("Friction (glide length)", _frictionValue));
         _frictionBar = NewBar(80, 98, 2); // value / 100
         _frictionBar.ValueChanged += (_, _) =>
         {
@@ -102,11 +109,13 @@ public sealed class SettingsForm : Form
             _frictionValue.Text = $"{_settings.Friction:0.00}";
             Commit();
         };
+        _tips.SetToolTip(_frictionBar, "Per-frame velocity decay: velocity *= friction (0.80–0.98).");
         AddRow(_frictionBar);
+        AddDescription("How long it keeps coasting after you stop. Higher = longer glide.");
 
         // --- Steps per event (4 .. 20) ---
         _stepsValue = NewValueLabel();
-        AddRow(NewHeader("Steps per event (messages per scroll)", _stepsValue));
+        AddRow(NewHeader("Smoothness", _stepsValue));
         _stepsBar = NewBar(4, 20, 2);
         _stepsBar.ValueChanged += (_, _) =>
         {
@@ -115,11 +124,13 @@ public sealed class SettingsForm : Form
             _stepsValue.Text = _settings.StepsPerEvent.ToString();
             Commit();
         };
+        _tips.SetToolTip(_stepsBar, "Velocity divisor per frame; messages emitted per scroll (4–20).");
         AddRow(_stepsBar);
+        AddDescription("Splits each scroll into more, smaller steps. Higher = smoother.");
 
         // --- Frame interval in ms (4 .. 16 ms ≈ 250 .. 60 fps) ---
         _frameValue = NewValueLabel();
-        AddRow(NewHeader("Frame interval (scroll cadence)", _frameValue));
+        AddRow(NewHeader("Frame interval", _frameValue));
         _frameBar = NewBar(4, 16, 1); // value = milliseconds per frame
         _frameBar.ValueChanged += (_, _) =>
         {
@@ -128,12 +139,14 @@ public sealed class SettingsForm : Form
             _frameValue.Text = $"{_settings.FrameIntervalMs} ms (~{1000 / _settings.FrameIntervalMs} fps)";
             Commit();
         };
+        _tips.SetToolTip(_frameBar, "Timer cadence in milliseconds (~8 ms ≈ 120 fps).");
         AddRow(_frameBar);
+        AddDescription("How often a step is sent. Lower ms = smoother, uses a bit more CPU.");
 
         // --- Scope checkbox ---
         _targetOnlyCheck = new CheckBox
         {
-            Text = "Apply only to target windows (unchecked = apply globally)",
+            Text = "Apply only to target windows",
             AutoSize = true,
         };
         _targetOnlyCheck.CheckedChanged += (_, _) =>
@@ -143,12 +156,16 @@ public sealed class SettingsForm : Form
             UpdateTargetControlsEnabled();
             Commit();
         };
+        _tips.SetToolTip(_targetOnlyCheck, "Unchecked applies smoothing to every application.");
         AddRow(_targetOnlyCheck);
+        AddDescription("Smooth only the listed apps below; unchecked smooths every app.");
 
         // --- Target windows list ---
-        AddRow(new Label { Text = "Target windows (process name or title fragment)", AutoSize = true });
+        AddRow(new Label { Text = "Target windows", AutoSize = true });
+        AddDescription("Match by process name (e.g. RadiAnt) or window-title text (e.g. Weasis).");
 
         _targetsList = new ListBox { Height = 130, IntegralHeight = false };
+        _tips.SetToolTip(_targetsList, "Case-insensitive substring match against the active window.");
         AddRow(_targetsList);
 
         // Input row: textbox (stretch) + Add + Remove.
@@ -205,6 +222,21 @@ public sealed class SettingsForm : Form
         if (c.Dock != DockStyle.Fill)
             c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         _root.Controls.Add(c);
+    }
+
+    /// <summary>Adds a small, greyed plain-language hint row under a control.</summary>
+    private void AddDescription(string text)
+    {
+        var l = new Label
+        {
+            Text = text,
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            Font = new Font(Font.FontFamily, Font.Size - 0.5f),
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(2, 0, 0, 10),
+        };
+        _root.Controls.Add(l);
     }
 
     private static Label NewValueLabel() => new() { AutoSize = true, Anchor = AnchorStyles.Right };
@@ -334,5 +366,12 @@ public sealed class SettingsForm : Form
         }
 
         base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _tips.Dispose();
+        base.Dispose(disposing);
     }
 }
