@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -36,9 +40,22 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
-      - name: Upload SmoothScroll.exe
+      - name: Upload SmoothScroll.exe (workflow artifact)
         uses: actions/upload-artifact@v4
         with:
           name: SmoothScroll-win-x64
           path: publish/SmoothScroll.exe
           if-no-files-found: error
+
+      # On pushes to main (i.e. after a merge), also publish a rolling "latest"
+      # GitHub Release with the exe attached, so there is a permanent, public
+      # download link on the repository's Releases page.
+      - name: Publish GitHub Release (latest)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: SmoothScroll (latest build)
+          body: Self-contained single-file Windows x64 build of SmoothScroll.
+          files: publish/SmoothScroll.exe
+          fail_on_unmatched_files: true
