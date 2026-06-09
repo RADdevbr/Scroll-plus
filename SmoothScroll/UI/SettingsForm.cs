@@ -24,8 +24,13 @@ public sealed class SettingsForm : Form
     private CheckBox _enabledCheck = null!;
     private CheckBox _targetOnlyCheck = null!;
 
+    private ComboBox _modeCombo = null!;
+
     private TrackBar _sensitivityBar = null!;
     private Label _sensitivityValue = null!;
+
+    private TrackBar _easeBar = null!;
+    private Label _easeValue = null!;
 
     private TrackBar _frictionBar = null!;
     private Label _frictionValue = null!;
@@ -38,6 +43,10 @@ public sealed class SettingsForm : Form
 
     private ListBox _targetsList = null!;
     private TextBox _targetInput = null!;
+
+    // Rows shown only in the matching mode (toggled by ApplyModeVisibility).
+    private readonly List<Control> _momentumRows = new();
+    private readonly List<Control> _inertiaRows = new();
 
     public SettingsForm(AppSettings settings, Action onChanged)
     {
@@ -83,7 +92,26 @@ public sealed class SettingsForm : Form
         AddRow(_enabledCheck);
         AddDescription("Master switch — when off, the mouse wheel behaves normally.");
 
-        // --- Sensitivity (0.5x .. 3.0x) ---
+        // --- Scroll mode ---
+        AddRow(new Label { Text = "Scroll mode", AutoSize = true });
+        _modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        _modeCombo.Items.AddRange(new object[]
+        {
+            "Momentum (web-like ease-out)",
+            "Inertia (decaying velocity)",
+        });
+        _modeCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_suppress) return;
+            _settings.Mode = _modeCombo.SelectedIndex == 0 ? ScrollMode.Momentum : ScrollMode.Inertia;
+            ApplyModeVisibility();
+            Commit();
+        };
+        _tips.SetToolTip(_modeCombo, "Momentum eases to a target distance; Inertia decays a velocity.");
+        AddRow(_modeCombo);
+        AddDescription("Momentum glides to a target like a web page; Inertia coasts with friction.");
+
+        // --- Sensitivity (0.5x .. 3.0x) — applies to both modes ---
         _sensitivityValue = NewValueLabel();
         AddRow(NewHeader("Sensitivity", _sensitivityValue));
         _sensitivityBar = NewBar(5, 30, 5); // value / 10
@@ -98,9 +126,24 @@ public sealed class SettingsForm : Form
         AddRow(_sensitivityBar);
         AddDescription("How far each wheel notch scrolls. Higher = faster, longer scrolls.");
 
-        // --- Friction (0.80 .. 0.98) ---
+        // --- Glide smoothness (Momentum only): EaseFactor 0.08 .. 0.40 ---
+        _easeValue = NewValueLabel();
+        _momentumRows.Add(AddRow(NewHeader("Glide smoothness", _easeValue)));
+        _easeBar = NewBar(8, 40, 4); // value / 100 = EaseFactor
+        _easeBar.ValueChanged += (_, _) =>
+        {
+            if (_suppress) return;
+            _settings.EaseFactor = _easeBar.Value / 100.0;
+            _easeValue.Text = $"{_settings.EaseFactor:0.00}";
+            Commit();
+        };
+        _tips.SetToolTip(_easeBar, "Fraction of the remaining distance eased out per frame (0.08–0.40).");
+        _momentumRows.Add(AddRow(_easeBar));
+        _momentumRows.Add(AddDescription("Lower = longer, smoother glide; higher = snappier."));
+
+        // --- Friction (Inertia only): 0.80 .. 0.98 ---
         _frictionValue = NewValueLabel();
-        AddRow(NewHeader("Friction (glide length)", _frictionValue));
+        _inertiaRows.Add(AddRow(NewHeader("Friction (glide length)", _frictionValue)));
         _frictionBar = NewBar(80, 98, 2); // value / 100
         _frictionBar.ValueChanged += (_, _) =>
         {
@@ -110,12 +153,12 @@ public sealed class SettingsForm : Form
             Commit();
         };
         _tips.SetToolTip(_frictionBar, "Per-frame velocity decay: velocity *= friction (0.80–0.98).");
-        AddRow(_frictionBar);
-        AddDescription("How long it keeps coasting after you stop. Higher = longer glide.");
+        _inertiaRows.Add(AddRow(_frictionBar));
+        _inertiaRows.Add(AddDescription("How long it keeps coasting after you stop. Higher = longer glide."));
 
-        // --- Steps per event (4 .. 20) ---
+        // --- Steps per event (Inertia only): 4 .. 20 ---
         _stepsValue = NewValueLabel();
-        AddRow(NewHeader("Smoothness", _stepsValue));
+        _inertiaRows.Add(AddRow(NewHeader("Smoothness", _stepsValue)));
         _stepsBar = NewBar(4, 20, 2);
         _stepsBar.ValueChanged += (_, _) =>
         {
@@ -125,10 +168,10 @@ public sealed class SettingsForm : Form
             Commit();
         };
         _tips.SetToolTip(_stepsBar, "Velocity divisor per frame; messages emitted per scroll (4–20).");
-        AddRow(_stepsBar);
-        AddDescription("Splits each scroll into more, smaller steps. Higher = smoother.");
+        _inertiaRows.Add(AddRow(_stepsBar));
+        _inertiaRows.Add(AddDescription("Splits each scroll into more, smaller steps. Higher = smoother."));
 
-        // --- Frame interval in ms (4 .. 16 ms ≈ 250 .. 60 fps) ---
+        // --- Frame interval in ms (4 .. 16 ms ≈ 250 .. 60 fps) — applies to both modes ---
         _frameValue = NewValueLabel();
         AddRow(NewHeader("Frame interval", _frameValue));
         _frameBar = NewBar(4, 16, 1); // value = milliseconds per frame
@@ -215,17 +258,18 @@ public sealed class SettingsForm : Form
     }
 
     /// <summary>Adds a control as the next full-width row of the layout.</summary>
-    private void AddRow(Control c)
+    private Control AddRow(Control c)
     {
         c.Margin = new Padding(0, 4, 0, 4);
         // Docked composites already fill the cell; stretch everything else width-wise.
         if (c.Dock != DockStyle.Fill)
             c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         _root.Controls.Add(c);
+        return c;
     }
 
     /// <summary>Adds a small, greyed plain-language hint row under a control.</summary>
-    private void AddDescription(string text)
+    private Control AddDescription(string text)
     {
         var l = new Label
         {
@@ -237,6 +281,15 @@ public sealed class SettingsForm : Form
             Margin = new Padding(2, 0, 0, 10),
         };
         _root.Controls.Add(l);
+        return l;
+    }
+
+    /// <summary>Shows only the rows relevant to the selected scroll mode.</summary>
+    private void ApplyModeVisibility()
+    {
+        bool momentum = _settings.Mode == ScrollMode.Momentum;
+        foreach (Control c in _momentumRows) c.Visible = momentum;
+        foreach (Control c in _inertiaRows) c.Visible = !momentum;
     }
 
     private static Label NewValueLabel() => new() { AutoSize = true, Anchor = AnchorStyles.Right };
@@ -293,7 +346,9 @@ public sealed class SettingsForm : Form
     {
         var d = new AppSettings();
         _settings.Enabled = d.Enabled;
+        _settings.Mode = d.Mode;
         _settings.Sensitivity = d.Sensitivity;
+        _settings.EaseFactor = d.EaseFactor;
         _settings.Friction = d.Friction;
         _settings.StepsPerEvent = d.StepsPerEvent;
         _settings.FrameIntervalMs = d.FrameIntervalMs;
@@ -326,9 +381,13 @@ public sealed class SettingsForm : Form
         {
             _enabledCheck.Checked = _settings.Enabled;
             _targetOnlyCheck.Checked = _settings.TargetOnly;
+            _modeCombo.SelectedIndex = _settings.Mode == ScrollMode.Momentum ? 0 : 1;
 
             _sensitivityBar.Value = Clamp((int)Math.Round(_settings.Sensitivity * 10), _sensitivityBar.Minimum, _sensitivityBar.Maximum);
             _sensitivityValue.Text = $"{_settings.Sensitivity:0.0}x";
+
+            _easeBar.Value = Clamp((int)Math.Round(_settings.EaseFactor * 100), _easeBar.Minimum, _easeBar.Maximum);
+            _easeValue.Text = $"{_settings.EaseFactor:0.00}";
 
             _frictionBar.Value = Clamp((int)Math.Round(_settings.Friction * 100), _frictionBar.Minimum, _frictionBar.Maximum);
             _frictionValue.Text = $"{_settings.Friction:0.00}";
@@ -344,6 +403,7 @@ public sealed class SettingsForm : Form
                 _targetsList.Items.Add(t);
 
             UpdateTargetControlsEnabled();
+            ApplyModeVisibility();
         }
         finally
         {

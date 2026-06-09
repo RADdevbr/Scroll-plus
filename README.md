@@ -21,8 +21,12 @@ notably **RadiAnt DICOM Viewer** and **Weasis** (Java Swing).
    (rather than `SendInput`). Posting directly bypasses the app's own input
    pipeline quirks and OS hit-testing, which is what makes self-rendering
    viewers cooperate. `SendInput` is used only as a fallback.
-5. **Inertia** — Each frame (~8 ms, ~120 fps) emits a fraction of the current
-   velocity and then decays it: `velocity *= friction`.
+5. **Smooth (two models)** — Each frame (~8 ms, ~120 fps) drains the accumulator:
+   - **Momentum** (default, web-like): eases the *remaining distance* toward a
+     target — big steps first, decaying smoothly to a stop (ease-out), like a web
+     page's momentum scrolling.
+   - **Inertia**: treats the accumulator as a velocity and decays it
+     (`velocity *= friction`) for a coasting tail.
 
 ### Project layout
 
@@ -41,24 +45,34 @@ notably **RadiAnt DICOM Viewer** and **Weasis** (Java Swing).
 Each control in the panel shows a plain-language hint, with the technical
 detail on hover.
 
+- **Scroll mode** — **Momentum** (web-like ease-out to a target, the default) or
+  **Inertia** (decaying velocity). The mode-specific sliders show/hide to match.
 - **Sensitivity** (`0.5x` … `3.0x`) — how far each wheel notch scrolls; higher
-  is faster (raw wheel-delta multiplier).
-- **Friction (glide length)** (`0.80` … `0.98`) — how long it keeps coasting
-  after you stop; higher is a longer glide (per-frame velocity decay).
-- **Smoothness / steps per event** (`4` … `20`) — splits each scroll into more,
-  smaller steps; higher is smoother.
+  is faster (raw wheel-delta multiplier). *(both modes)*
+- **Glide smoothness** (`0.08` … `0.40`, *Momentum only*) — fraction of the
+  remaining distance eased out per frame; lower is a longer, smoother glide.
+- **Friction (glide length)** (`0.80` … `0.98`, *Inertia only*) — how long it
+  keeps coasting after you stop; higher is a longer glide (per-frame velocity decay).
+- **Smoothness / steps per event** (`4` … `20`, *Inertia only*) — splits each
+  scroll into more, smaller steps; higher is smoother.
 - **Frame interval** (`4` … `16` ms) — how often a step is sent; lower ms is
-  smoother and uses a bit more CPU (~8 ms ≈ 120 fps).
+  smoother and uses a bit more CPU (~8 ms ≈ 120 fps). *(both modes)*
 - **Target windows** — add/remove by process name (e.g. `RadiAnt`) or window
   title fragment (e.g. `Weasis`).
 - **Apply only to target windows / globally** — checkbox.
 
-> Tuning tip: total emitted scroll is roughly conserved when
+> Inertia tuning tip: total emitted scroll is roughly conserved when
 > `Steps per event ≈ 1 / (1 - Friction)`. e.g. Friction `0.90` → ~10 steps.
 
-**Directional inertia:** the glide only carries the direction you're scrolling.
+**Directional glide:** the glide only carries the direction you're scrolling.
 Rolling the wheel the opposite way mid-glide cancels it and immediately starts a
-new smooth glide in the new direction.
+new smooth glide in the new direction (both modes).
+
+> **Note on slice viewers (RadiAnt / Weasis):** these scroll in discrete steps
+> (one wheel notch = one slice), so the buttery, continuous feel of web momentum
+> can't fully apply — a flick instead spaces the slice changes out over time
+> (cine-like). Apps that scroll content continuously (browsers, editors, PDFs)
+> get the closest match to the claude.ai feel.
 
 ## Behavior
 

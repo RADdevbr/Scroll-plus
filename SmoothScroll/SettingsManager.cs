@@ -3,6 +3,16 @@ using System.Text.Json.Serialization;
 
 namespace SmoothScroll;
 
+/// <summary>Scroll smoothing model.</summary>
+public enum ScrollMode
+{
+    /// <summary>Velocity that decays exponentially each frame (friction + steps).</summary>
+    Inertia,
+
+    /// <summary>Eases the remaining distance toward a target each frame (web-like ease-out).</summary>
+    Momentum,
+}
+
 /// <summary>
 /// Strongly-typed, serializable application settings. A single instance of this
 /// object is shared (by reference) between the UI and the <see cref="ScrollEngine"/>,
@@ -13,8 +23,17 @@ public sealed class AppSettings
     /// <summary>Master on/off switch (mirrors the tray toggle).</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Which smoothing model to use. Defaults to the web-like Momentum feel.</summary>
+    public ScrollMode Mode { get; set; } = ScrollMode.Momentum;
+
     /// <summary>Multiplier applied to the raw wheel delta. Range 0.5x .. 3.0x.</summary>
     public double Sensitivity { get; set; } = 1.0;
+
+    /// <summary>
+    /// Momentum mode: fraction of the remaining distance eased out each frame.
+    /// Lower = longer, smoother glide; higher = snappier. Range 0.08 .. 0.40.
+    /// </summary>
+    public double EaseFactor { get; set; } = 0.18;
 
     /// <summary>Per-frame exponential decay factor (inertia). Range 0.80 .. 0.98.</summary>
     public double Friction { get; set; } = 0.90;
@@ -40,7 +59,9 @@ public sealed class AppSettings
     public AppSettings Clone() => new()
     {
         Enabled = Enabled,
+        Mode = Mode,
         Sensitivity = Sensitivity,
+        EaseFactor = EaseFactor,
         Friction = Friction,
         StepsPerEvent = StepsPerEvent,
         FrameIntervalMs = FrameIntervalMs,
@@ -62,6 +83,7 @@ public sealed class SettingsManager
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        Converters = { new JsonStringEnumConverter() }, // serialize ScrollMode as text
     };
 
     public SettingsManager()
