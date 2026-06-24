@@ -12,7 +12,9 @@ notably **RadiAnt DICOM Viewer** and **Weasis** (Java Swing).
    intercepts every `WM_MOUSEWHEEL` on the desktop.
 2. **Target detection** — The foreground window's title (`GetForegroundWindow` +
    `GetWindowText`) and process name are matched against a configurable list. In
-   *target-only* mode, only matching apps are smoothed.
+   *target-only* mode, only matching apps are smoothed. A separate **exclusion
+   list** is checked first: any window matching it is always left raw, even in
+   global mode.
 3. **Swallow + smooth** — For a targeted event, the original wheel message is
    swallowed (the hook returns a non-zero value) and handed to the physics
    engine.
@@ -60,6 +62,11 @@ detail on hover.
 - **Target windows** — add/remove by process name (e.g. `RadiAnt`) or window
   title fragment (e.g. `Weasis`).
 - **Apply only to target windows / globally** — checkbox.
+- **Never apply to (exclusions)** — a blocklist of process names / title
+  fragments that are **never** smoothed, even in global mode. An exclusion wins
+  over the target list, so a window matching both is left untouched. Use it to
+  carve out apps whose own scrolling you want to keep raw while smoothing
+  everything else.
 
 > Inertia tuning tip: total emitted scroll is roughly conserved when
 > `Steps per event ≈ 1 / (1 - Friction)`. e.g. Friction `0.90` → ~10 steps.

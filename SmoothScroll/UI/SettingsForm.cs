@@ -44,6 +44,9 @@ public sealed class SettingsForm : Form
     private ListBox _targetsList = null!;
     private TextBox _targetInput = null!;
 
+    private ListBox _excludedList = null!;
+    private TextBox _excludedInput = null!;
+
     // Rows shown only in the matching mode (toggled by ApplyModeVisibility).
     private readonly List<Control> _momentumRows = new();
     private readonly List<Control> _inertiaRows = new();
@@ -238,6 +241,41 @@ public sealed class SettingsForm : Form
         inputRow.Controls.Add(removeButton, 2, 0);
         AddRow(inputRow);
 
+        // --- Excluded windows list ---
+        AddRow(new Label { Text = "Never apply to (exclusions)", AutoSize = true });
+        AddDescription("Apps listed here are never smoothed, even in global mode. Wins over the target list.");
+
+        _excludedList = new ListBox { Height = 110, IntegralHeight = false };
+        _tips.SetToolTip(_excludedList, "Case-insensitive substring match against the active window.");
+        AddRow(_excludedList);
+
+        // Input row: textbox (stretch) + Add + Remove.
+        var excludedInputRow = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Fill };
+        excludedInputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        excludedInputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        excludedInputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _excludedInput = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0) };
+        _excludedInput.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                AddExcluded();
+            }
+        };
+
+        var addExcludedButton = new Button { Text = "Add", AutoSize = true, Margin = new Padding(0, 0, 6, 0) };
+        addExcludedButton.Click += (_, _) => AddExcluded();
+
+        var removeExcludedButton = new Button { Text = "Remove", AutoSize = true, Margin = new Padding(0) };
+        removeExcludedButton.Click += (_, _) => RemoveSelectedExcluded();
+
+        excludedInputRow.Controls.Add(_excludedInput, 0, 0);
+        excludedInputRow.Controls.Add(addExcludedButton, 1, 0);
+        excludedInputRow.Controls.Add(removeExcludedButton, 2, 0);
+        AddRow(excludedInputRow);
+
         // --- Bottom buttons (right-aligned) ---
         var buttonRow = new FlowLayoutPanel
         {
@@ -342,6 +380,33 @@ public sealed class SettingsForm : Form
         Commit();
     }
 
+    private void AddExcluded()
+    {
+        string value = _excludedInput.Text.Trim();
+        if (value.Length == 0)
+            return;
+
+        if (!_settings.ExcludedWindows.Any(t => t.Equals(value, StringComparison.OrdinalIgnoreCase)))
+        {
+            _settings.ExcludedWindows.Add(value);
+            _excludedList.Items.Add(value);
+            Commit();
+        }
+
+        _excludedInput.Clear();
+        _excludedInput.Focus();
+    }
+
+    private void RemoveSelectedExcluded()
+    {
+        if (_excludedList.SelectedItem is not string selected)
+            return;
+
+        _settings.ExcludedWindows.RemoveAll(t => t.Equals(selected, StringComparison.OrdinalIgnoreCase));
+        _excludedList.Items.Remove(selected);
+        Commit();
+    }
+
     private void ResetDefaults()
     {
         var d = new AppSettings();
@@ -355,6 +420,8 @@ public sealed class SettingsForm : Form
         _settings.TargetOnly = d.TargetOnly;
         _settings.TargetWindows.Clear();
         _settings.TargetWindows.AddRange(d.TargetWindows);
+        _settings.ExcludedWindows.Clear();
+        _settings.ExcludedWindows.AddRange(d.ExcludedWindows);
 
         SyncFromSettings();
         Commit();
@@ -401,6 +468,10 @@ public sealed class SettingsForm : Form
             _targetsList.Items.Clear();
             foreach (string t in _settings.TargetWindows)
                 _targetsList.Items.Add(t);
+
+            _excludedList.Items.Clear();
+            foreach (string t in _settings.ExcludedWindows)
+                _excludedList.Items.Add(t);
 
             UpdateTargetControlsEnabled();
             ApplyModeVisibility();

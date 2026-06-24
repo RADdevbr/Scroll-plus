@@ -20,10 +20,15 @@ public sealed class WindowTargeting
     /// <param name="isTarget">
     /// True when the foreground window matches the configured target list.
     /// </param>
+    /// <param name="isExcluded">
+    /// True when the foreground window matches the exclusion list; such windows
+    /// should never be smoothed, even in global mode.
+    /// </param>
     /// <returns>The window handle to deliver wheel messages to, or Zero.</returns>
-    public IntPtr ResolveScrollTarget(Point screenPoint, AppSettings settings, out bool isTarget)
+    public IntPtr ResolveScrollTarget(Point screenPoint, AppSettings settings, out bool isTarget, out bool isExcluded)
     {
         isTarget = false;
+        isExcluded = false;
 
         IntPtr foreground = GetForegroundWindow();
         if (foreground == IntPtr.Zero)
@@ -32,6 +37,7 @@ public sealed class WindowTargeting
         string title = GetWindowTitle(foreground);
         string process = GetProcessName(foreground);
         isTarget = MatchesTarget(title, process, settings.TargetWindows);
+        isExcluded = MatchesTarget(title, process, settings.ExcludedWindows);
 
         // Wheel messages are hit-tested against the window directly under the
         // cursor, so deliver there for correct behavior with multi-pane viewers.
