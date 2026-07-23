@@ -56,6 +56,13 @@ public sealed class AppSettings
     /// </summary>
     public List<string> TargetWindows { get; set; } = new() { "RadiAnt", "Weasis" };
 
+    /// <summary>
+    /// Process names or window-title fragments where smoothing is NEVER applied,
+    /// even in global mode. Takes precedence over <see cref="TargetWindows"/> —
+    /// a window matching both is left untouched. Empty by default.
+    /// </summary>
+    public List<string> ExcludedWindows { get; set; } = new();
+
     public AppSettings Clone() => new()
     {
         Enabled = Enabled,
@@ -67,6 +74,7 @@ public sealed class AppSettings
         FrameIntervalMs = FrameIntervalMs,
         TargetOnly = TargetOnly,
         TargetWindows = new List<string>(TargetWindows),
+        ExcludedWindows = new List<string>(ExcludedWindows),
     };
 }
 

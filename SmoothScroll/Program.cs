@@ -94,7 +94,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (!_settings.Enabled)
             return;
 
-        IntPtr targetHwnd = _targeting.ResolveScrollTarget(e.ScreenPoint, _settings, out bool isTarget);
+        IntPtr targetHwnd = _targeting.ResolveScrollTarget(e.ScreenPoint, _settings, out bool isTarget, out bool isExcluded);
+
+        // Excluded apps are never smoothed, even in global mode.
+        if (isExcluded)
+            return;
 
         // In target-only mode, ignore everything that is not a configured app.
         if (_settings.TargetOnly && !isTarget)
